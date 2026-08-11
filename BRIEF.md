@@ -1,6 +1,6 @@
 # LINUX INSTALL FEST — OPERATIONAL BRIEF
 
-## SECTION 1: ATTENDEE INSTRUCTIONS (Send Before Event)
+## SECTION 1: ATTENDEE INSTRUCTIONS (Before Event)
 
 ### Mandatory Pre-Requisites
 1. **Back Up Everything:** You are solely responsible for your data. Back up all important files to an external drive or cloud storage before arriving.
@@ -13,8 +13,7 @@
    * Shrink by at least **50,000 MB (50 GB)**.
    * **Leave the newly created space as raw "Unallocated" space. Do not format or assign a drive letter to it.**
 4. **BIOS Preparation:**
-   * Take a photo of your current BIOS boot order screen on your phone.
-   * Note down your laptop model and BIOS boot keys (`F2`, `F10`, `F12`, `Del`).
+   * Note down your laptop model specific BIOS boot keys (`F2`, `F10`, `F12`, `Del`).
 
 ---
 
@@ -37,7 +36,7 @@ Station Operators drive the physical installation pipeline, manage USB handoffs,
 #### Step 2: Custom Storage Setup
 1. Select **Custom Storage Layout**.
 2. Find the ~50 GB **Unallocated Space**.
-3. **STOP:** Call a Team Leader for Point-and-Call verification before touching any partition tables.
+3. **STOP:** Call another Team Leader for Point-and-Call verification before touching any partition tables.
 4. Assign Root (`/`) formatted as `ext4` on the unallocated space.
 5. Select the existing FAT32 EFI partition (~100–512 MB) and set mount point to `/boot/efi`. **Do NOT format it.**
 6. Complete installer profile setup and trigger base installation.
