@@ -1,6 +1,3 @@
-# FLOWCHART.md
-
-```markdown
 # LINUX INSTALL FEST — MASTER FLOWCHART
 
 ===================================================================================
@@ -31,11 +28,13 @@
 ===================================================================================
                               │
                               ▼
-           [ Enter BIOS: Disable Secure Boot & Fast Boot ]
-           [ Change SATA Mode from VMD/RST to AHCI       ]
-                              │
-                              ▼
-                    [ Check Hardware RAM ]
+            [ Enter BIOS: Disable Secure Boot & Fast Boot ]
+            [ Change SATA Mode from VMD/RST to AHCI       ]
+            [ RST/RAID→AHCI can BSOD Windows (0x7B):      ]
+            [ boot Windows once to verify, else RUNBOOK 1.1 ]
+                               │
+                               ▼
+                     [ Check Hardware RAM ]
                                /          \
                         >= 6 GB RAM      < 6 GB RAM
                              /              \
@@ -80,7 +79,7 @@
               [ Connect Wi-Fi via `nmcli dev wifi` ]
                               │
                               ▼
-          [ Execute `./captive-bypass.sh` with credentials ]
+           [ Execute `./captive-bypass` with credentials ]
                               │
                               ▼
                 [ Test Connection: `ping google.com` ]
@@ -110,7 +109,7 @@
           [ Launch Interactive Post-Install Setup Script ]
                               │
                               ▼
-       [ Execute `./captive-bypass.sh --install` in GUI terminal ]
+        [ Execute `./captive-bypass --install` in GUI terminal ]
                               │
                               ▼
 ===================================================================================

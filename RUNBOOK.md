@@ -12,6 +12,11 @@
   2. Locate **SATA Operation**, **Storage Configuration**, or **NVMe Settings**.
   3. Change controller mode from `RST / VMD / RAID` to **`AHCI`**.
   4. Save changes, reboot, and restart installer.
+* **RST/RAID → AHCI warning:** If Windows was installed in RST/RAID mode, this switch can BSOD it with `INACCESSIBLE_BOOT_DEVICE` (0x7B). Prepare Windows first so it handshakes with the AHCI driver:
+  1. In Windows (admin terminal): `bcdedit /set {current} safeboot minimal`.
+  2. Reboot into BIOS, switch to **AHCI**, and let Windows boot into **Safe Mode** — it installs the AHCI driver there.
+  3. Back in Windows (admin terminal): `bcdedit /deletevalue {current} safeboot`, then reboot normally.
+  4. Only proceed with partitioning once Windows boots cleanly in AHCI mode.
 
 ### Problem 1.2: USB drive does not appear in boot menu
 * **Root Cause:** Secure boot restrictions, corrupted flash, or CSM/Legacy mismatch.
@@ -26,7 +31,7 @@
 ## 2. INSTALLATION & RAM INJECTION FAILURES
 
 ### Problem 2.1: System crashes / drops to initramfs after adding `toram`
-* **Root Cause:** System has insufficient physical RAM (<6 GB), causing an Out-Of-Memory (OOM) panic while copying the ISO image to tempfs.
+* **Root Cause:** System has insufficient physical RAM (<6 GB), causing an Out-Of-Memory (OOM) panic while copying the ISO image to tmpfs.
 * **Resolution:**
   1. Hard power-off the laptop.
   2. Re-insert USB drive.
@@ -56,14 +61,15 @@
   3. Temporarily disable Pagefile: `System Properties > Advanced > Performance Settings > Advanced > Virtual Memory > No paging file`.
   4. Reboot Windows, open `diskmgmt.msc`, and re-attempt shrink.
   5. Re-enable pagefile after shrink completes.
+* **Note:** Hibernation stays **off** by design — Windows Fast Startup depends on it and must remain off for clean dual-boot and for GRUB's `os-prober` to detect Windows (see Problem 5.2).
 
 ### Problem 3.2: Accidental modification / deletion of existing EFI partition
 * **Root Cause:** Operator formatted the existing FAT32 boot partition during custom layout.
 * **Resolution (Emergency EFI Repair):**
   1. Complete Linux installation.
-  2. Boot into Linux, open terminal, and reinstall GRUB to EFI:
+  2. Boot into Linux, open terminal, and reinstall GRUB to EFI. UEFI requires explicit `--target` and `--efi-directory` (the bare `grub-install /dev/nvme0n1` form only works for legacy BIOS):
      ```bash
-     sudo grub-install /dev/nvme0n1 # adjust to actual disk ID
+     sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu /dev/nvme0n1 # adjust to actual disk ID
      sudo update-grub
      ```
   3. To restore Windows bootloader, prepare a Windows Recovery USB, boot into command prompt, and run:
@@ -71,6 +77,27 @@
      bootrec /fixmbr
      bootrec /fixboot
      bcdboot C:\Windows
+     ```
+
+### Problem 3.3: Installer won't use the existing Windows EFI partition for `/boot/efi`
+* **Root Cause:** Subiquity only lets you mount an existing ESP when its disk is selected as a boot device, and the Format checkbox can default to on.
+* **Resolution:**
+  1. In Custom Storage Layout, select the small FAT32 partition flagged **EFI System**.
+  2. Confirm its mount point is `/boot/efi` and **Format is UNCHECKED** — one ESP safely holds both Windows and Ubuntu boot files.
+  3. If the mount option is greyed out, the target disk is not selected as a boot device in the storage screen; enable it, and the installer reuses the existing ESP.
+  4. Do not let the installer create a second ESP — a new ~538 MiB ESP is auto-created only on disks with none, and a second ESP on another disk orphans GRUB from the firmware boot order.
+
+### Problem 3.4: Installer warns "no swap space has been specified"
+* **Root Cause:** The custom layout only created `/`, so no swap exists; Ubuntu's guided-install swapfile is not created for custom layouts.
+* **Resolution:**
+  1. This is a warning, not an error — continue the install.
+  2. After first boot, add a swapfile (recommended on <6 GB RAM laptops):
+     ```bash
+     sudo fallocate -l 4G /swapfile
+     sudo chmod 600 /swapfile
+     sudo mkswap /swapfile
+     sudo swapon /swapfile
+     echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
      ```
 
 ---
@@ -88,16 +115,18 @@
      ```
 
 ### Problem 4.2: Captive bypass script reports success, but `ping google.com` fails
-* **Root Cause:** DNS resolution failure or invalid `/etc/resolv.conf` entries.
+* **Root Cause:** DNS resolution failure — the portal's DNS servers aren't resolving, or a stale server is cached.
 * **Resolution:**
   1. Test direct IP connectivity:
      ```bash
      ping -c 3 8.8.8.8
      ```
-  2. If IP ping works but domain ping fails, override system DNS manually:
+  2. If IP ping works but domain ping fails, override DNS for the active link. Do **not** overwrite `/etc/resolv.conf` — it is a symlink managed by `systemd-resolved`/NetworkManager and gets clobbered on reconnect:
      ```bash
-     echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+     nmcli -t dev status          # find the Wi-Fi interface name (e.g. wlp2s0, wlan0)
+     sudo resolvectl dns <interface> 8.8.8.8
      ```
+  3. Verify with `ping -c 3 google.com`.
 
 ---
 
@@ -112,23 +141,30 @@
   4. Save and exit.
 
 ### Problem 5.2: Dual-boot GRUB menu appears, but Windows option is missing
-* **Root Cause:** `os-prober` disabled by default in modern GRUB packages.
+* **Root Cause:** `os-prober` is disabled by default in modern GRUB packages (`GRUB_DISABLE_OS_PROBER` defaults to true).
 * **Resolution:**
   1. Boot into Ubuntu.
-  2. Open terminal and run:
+  2. Open terminal, enable os-prober, and regenerate the menu:
      ```bash
-     sudo os-prober
+     echo 'GRUB_DISABLE_OS_PROBER=false' | sudo tee -a /etc/default/grub
      sudo update-grub
      ```
   3. Verify Windows Boot Manager is detected and listed in terminal output. Reboot.
+* **Note:** os-prober also skips a hibernated/dirty NTFS volume. If Windows Fast Startup is on, disable it in Windows (`Control Panel > Power Options > Choose what the power buttons do` → untick **Turn on fast startup**), reboot Windows once, then repeat step 2.
 
 ### Problem 5.3: KDE display manager drops into login loop (logs in, screen flashes, drops back to SDDM)
-* **Root Cause:** Root partition (`/`) ran out of disk space mid-installation during package downloads.
+* **Root Cause:** Usually the minimal desktop install (`--no-install-recommends`) is missing the session component Plasma needs to start (e.g. `plasma-workspace-wayland`) — not a full root partition. A 50 GB `/` almost never fills from a KDE install.
 * **Resolution:**
-  1. At SDDM login screen, press `Ctrl + Alt + F3` to access TTY text console.
+  1. At the SDDM login screen, press `Ctrl + Alt + F3` to access a TTY text console.
   2. Log in and inspect free space: `df -h /`.
-  3. Clean cached packages:
+  3. If space is tight, clean cached packages:
      ```bash
      sudo apt clean
      sudo apt install -f
      ```
+  4. Otherwise, install the missing session component and restart the login manager:
+     ```bash
+     sudo apt install -y plasma-workspace-wayland
+     sudo systemctl restart sddm
+     ```
+  5. At SDDM, try the **Wayland** session if the X11 session keeps looping.
