@@ -1,0 +1,27 @@
+The first point of decision is to decide the distribution. The below criterion are the main POI to decide this variable.
+	
+	1.unnattended/autoinstall maturity
+	2.Supports KDE
+	3.Secure Boot support out of box.
+	4.Dual boot-track record. 
+	5.Driver Currency for latest firmware(Important)(Wifi 7)
+
+
+
+Interest form questions(Tentative)
+
+	1. Do you have secure boot on
+	2. Do you have a 64 bit UEFI BIOS
+	3. How old is your Laptop, when was it released.
+	4. Does you BIOS expose PXE
+	5. How much free space do you have in your ssd, or do you have more than one ssd slot.
+	6. Would you be interested in Dual-Booting Linux?
+	7. Please attach dxdiag details.
+	8. What is your laptop model no. (GOSPEL LOOKUP)
+	9. 
+
+
+Venue Flowchart
+
+	1. Vet Laptops at door for basic requirements.(lsblk, dmidecode)
+	2. 
