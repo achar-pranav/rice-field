@@ -1,125 +1,73 @@
-# LINUX INSTALL FEST — MASTER FLOWCHART
+# Master Flowchart (v2 draft)
 
-===================================================================================
-                       STAGE 0: ATTENDEE PRE-CHECK
-===================================================================================
-                                     │
-                                     ▼
-                    [ Has attendee backed up data? ]
-                               /          \
-                             YES           NO ──► [ STOP: Force Backup / Reject ]
-                              │
-                              ▼
-               [ BitLocker Status Check in Windows ]
-                               /          \
-                          DISABLED       ENABLED ──► [ Control Panel > Turn Off ]
-                              │                           Wait for 100% Decryption
-                              ▼
-            [ Shrink C: Drive in diskmgmt.msc (50GB+) ]
-                              │
-                              ▼
-           [ Is there ~50GB raw "Unallocated Space"? ]
-                               /          \
-                             YES           NO ──► [ Offload to Rescue Station ]
-                              │
-                              ▼
-===================================================================================
-                       STAGE 1: BIOS & BOOT SELECTION
-===================================================================================
-                              │
-                              ▼
-            [ Enter BIOS: Disable Secure Boot & Fast Boot ]
-            [ Change SATA Mode from VMD/RST to AHCI       ]
-            [ RST/RAID→AHCI can BSOD Windows (0x7B):      ]
-            [ boot Windows once to verify, else RUNBOOK 1.1 ]
+Main line runs top to bottom. `──► [DEPT]` is a side exit to a department; the laptop returns at the stated rejoin point.
+Departments (`[CONFIRM]`): **BL** BitLocker, **WIFI** Wi-Fi/Drivers, **GPU** Graphics, **STOR** Storage Controller, **BIOS** BIOS/Firmware, **BOOT** EFI/GRUB, **PART** Installer/Partitioning.
+**OP** = operator-only step. **SUPER** = call a Super for anything even slightly wrong.
+
+```
+==================== DOOR (verbal + msinfo32) ====================
+        [ Fill declaration form: self-declared answers + msinfo32 fields ]
+        [ Signed line: backed up, proceeding at own risk                 ]
+                               │
+        [ ARM / no USB port / below min space? ] ──YES──► [ OUT OF SCOPE ]
+                               │ NO
+        [ Ever had Linux/other OS? ] ──YES──► [ Flag for BOOT early ]
                                │
                                ▼
-                     [ Check Hardware RAM ]
-                               /          \
-                        >= 6 GB RAM      < 6 GB RAM
-                             /              \
-         [ Boot USB w/ `toram` flag ]     [ Boot USB standard mode ]
-                     │                               │
-       [ Language screen loads ]                     │
-                     │                               │
-         [ YANK USB & PASS ON ]                      │
-                     │                               │
-                     └───────────────┬───────────────┘
-                                     │
-                                     ▼
-===================================================================================
-                   STAGE 2: DUAL-TL CUSTOM PARTITIONING
-===================================================================================
-                              │
-                              ▼
-               [ Select "Custom Storage Layout" ]
-                              │
-                              ▼
-           [ CALL 2 TEAM LEADERS FOR POINT-AND-CALL ]
-                              │
-       ┌──────────────────────┴──────────────────────┐
-       │ TL Verification Checklist:                  │
-       │ 1. Mount unallocated space to `/` (ext4)    │
-       │ 2. Set existing EFI partition to `/boot/efi`│
-       │ 3. Confirm DO NOT FORMAT on EFI partition   │
-       └──────────────────────┬──────────────────────┘
-                              │
-                              ▼
-                 [ Commit & Run Installation ]
-                              │
-                              ▼
-===================================================================================
-                 STAGE 3: NETWORK & CAPTIVE PORTAL BYPASS
-===================================================================================
-                              │
-                              ▼
-               [ Reboot into Server TTY Console ]
-                              │
-                              ▼
-              [ Connect Wi-Fi via `nmcli dev wifi` ]
-                              │
-                              ▼
-           [ Execute `./captive-bypass` with credentials ]
-                              │
-                              ▼
-                [ Test Connection: `ping google.com` ]
-                               /          \
-                            PASS          FAIL ──► [ Refer to RUNBOOK.md ]
-                              │
-                              ▼
-===================================================================================
-                  STAGE 4: DESKTOP BUILD & REBOOT
-===================================================================================
-                              │
-                              ▼
-       [ Set India mirror: `/etc/apt/sources.list.d/ubuntu.sources` ]
-                              │
-                              ▼
-         [ Install minimal desktop: `kde-plasma-desktop` + `sddm` ]
-                              │
-                              ▼
-              [ Enable SDDM & Reboot into Desktop GUI ]
-                              │
-                              ▼
-===================================================================================
-             STAGE 5: POST-INSTALL SCRIPT & PERSISTENCE
-===================================================================================
-                              │
-                              ▼
-          [ Launch Interactive Post-Install Setup Script ]
-                              │
-                              ▼
-        [ Execute `./captive-bypass --install` in GUI terminal ]
-                              │
-                              ▼
-===================================================================================
-                         STAGE 6: FINAL QA & HANDOFF
-===================================================================================
-                              │
-                              ▼
-           [ Verify Dual-Boot: GRUB shows Ubuntu & Windows ]
-           [ Verify GUI Wi-Fi Auto-Reconnect & Internet    ]
-                              │
-                              ▼
+============================ SEAT ================================
+                      [ 1. WINDOWS PREP ]
+                               │
+        [ manage-bde -status C: → Fully Decrypted, 0.0%? ]
+                       │ YES           │ NO
+                       │               └──► [BL] decrypt in waiting area ──┐
+                       │                    (OP: verify all 48 key digits) │
+                       │◄──────────────── rejoin here ─────────────────────┘
+        [ Fast Startup off · clean shutdown · Windows boots ]
+        [ Shrink C: (100 GB + RAM + 1 GB) · space unallocated? ]
+                       │ YES           │ NO ──► [PART] shrink fix ──► rejoin here
+                               ▼
+                      [ 2. BIOS / UEFI ]
+        [ UEFI · Secure Boot OFF · USB boot on ]
+                       │               │ locked / odd menu ──► [BIOS] ──► rejoin here
+                               ▼
+                      [ 3. LIVE BOOT ]
+        [ RAM ≥ 6 GB? ]── YES ──► [ toram before --- · yank USB at language screen ]
+                       └── NO  ──► [ no toram · USB stays in ]
+                       │               │ hangs on logo ──► [GPU] ──► rejoin here
+                               ▼
+                   [ 4. LIVE HARDWARE CHECK ]
+        [ Desktop, keyboard, touchpad OK? ]
+        [ lsblk shows nvme0n1? ]── NO ──► [STOR] AHCI flow ──► rejoin at BIOS (2)
+        [ Wi-Fi + Firefox captive portal OK? ]
+                       │               │ NO ──► [WIFI]: driver USB → external NIC
+                       │               │          fail ──► [ COME BACK ANOTHER DAY ]
+                       │               └────────────────────► rejoin here on success
+                               ▼
+                   [ 5. PARTITION / INSTALL ]
+        [ OP: manual partitioning in the unallocated block ]
+        [ OP: new EFI 1 GB FAT32 "linux-efi" /boot/efi + boot flag ]
+        [ OP: root ext4 /  (no swap partition) ]
+        [ OP: single-operator review ]── anything wrong ──► [ SUPER ]
+                               │ OK
+        [ Install ]── error ──► [PART] ──► rejoin here
+                               ▼
+                    [ 6. FIRST BOOT ]
+        [ Create swapfile = RAM ]
+        [ GRUB default + Windows listed? ]── NO ──► [BOOT] ──► rejoin here
+        [ Power-cycle: GRUB first, Windows boots, no BitLocker prompt? ]
+                       │               │ prompt ──► [BL] ──► rejoin here
+                               ▼
+                   [ 7. MINIMUM HANDOFF VALIDATION ]
+        [ Kubuntu reboots · graphics OK · network OK · Windows boots ]
+                               ▼
+                         [ 8. HANDOFF ]
+        [ Tell what was installed + limitations · record issues ]
+                               ▼
+                       [ SYSTEM COMPLETE ]
+```
 
-                     [ SYSTEM COMPLETE ]
+## Any step
+
+- Unknown problem or destructive step needed: stop and call a **SUPER**.
+- Timeout before parking a laptop: `[OPEN]`.
+- Each department branch needs its own sub-flowchart and checklist (BitLocker first). `[OPEN]`

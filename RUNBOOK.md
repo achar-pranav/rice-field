@@ -1,170 +1,191 @@
-# LINUX INSTALL FEST — TROUBLESHOOTING RUNBOOK
-*(Use this document ONLY when standard procedures fail or errors occur.)*
+# Troubleshooting Runbook — by Department (v2 draft)
+
+Use this only for non-standard cases the master flow does not cover. Standard steps (including the swapfile) live in MASTER.md. Each entry: **Symptom**, **Check**, **Fix**, **Escalate**.
+Every fix is `[UNTESTED]` until it has been run on real hardware in the dry run.
+Anything not listed here: stop and call a Super. Do not improvise destructive changes.
+Timeouts for parking a laptop: `[OPEN]`.
 
 ---
 
-## 1. BIOS & PRE-BOOT FAILURES
+## BitLocker
 
-### Problem 1.1: Internal NVMe/SSD drive not visible in Ubuntu installer
-* **Root Cause:** Storage controller is operating in proprietary Intel VMD / RAID / RST mode.
-* **Resolution:**
-  1. Reboot machine and enter BIOS (`F2`/`F10`/`F12`/`Del`).
-  2. Locate **SATA Operation**, **Storage Configuration**, or **NVMe Settings**.
-  3. Change controller mode from `RST / VMD / RAID` to **`AHCI`**.
-  4. Save changes, reboot, and restart installer.
-* **RST/RAID → AHCI warning:** If Windows was installed in RST/RAID mode, this switch can BSOD it with `INACCESSIBLE_BOOT_DEVICE` (0x7B). Prepare Windows first so it handshakes with the AHCI driver:
-  1. In Windows (admin terminal): `bcdedit /set {current} safeboot minimal`.
-  2. Reboot into BIOS, switch to **AHCI**, and let Windows boot into **Safe Mode** — it installs the AHCI driver there.
-  3. Back in Windows (admin terminal): `bcdedit /deletevalue {current} safeboot`, then reboot normally.
-  4. Only proceed with partitioning once Windows boots cleanly in AHCI mode.
+(B1 is the most common case. If it keeps recurring it moves into MASTER.)
 
-### Problem 1.2: USB drive does not appear in boot menu
-* **Root Cause:** Secure boot restrictions, corrupted flash, or CSM/Legacy mismatch.
-* **Resolution:**
-  1. Confirm **Secure Boot** is set to `Disabled` in BIOS.
-  2. Ensure **Fast Boot** is `Disabled`.
-  3. Verify BIOS is set to **UEFI Only** (Disable CSM/Legacy mode).
-  4. Swap USB drive to a direct motherboard/laptop port (avoid unpowered USB hubs).
+Rule: Windows must stay bootable. Nothing in BIOS, partitions or bootloader changes until Fully Decrypted.
 
----
+### B1. Encryption still on (BitLocker or Device Encryption)
+- **Check:** `manage-bde -status C:` as Administrator. Need Fully Decrypted and 0.0%.
+- **Fix:** Windows Home: Settings > Privacy & security > Device encryption > Off. Windows Pro: Control Panel > BitLocker Drive Encryption > Turn off. Laptop stays on, plugged in and awake until 100%. Waiting area has power outlets.
+- **Escalate:** Cannot turn off: B3.
 
-## 2. INSTALLATION & RAM INJECTION FAILURES
+### B2. Key verification (OP)
+- **Check:** While still encrypted, run `manage-bde -protectors -get C:`. Compare all 48 digits with the student's saved copy.
+- **Fix:** Every digit must match before anything changes. `[CONFIRM]` skipped for fully decrypted students.
+- **Escalate:** Mismatch or no copy: B4.
 
-### Problem 2.1: System crashes / drops to initramfs after adding `toram`
-* **Root Cause:** System has insufficient physical RAM (<6 GB), causing an Out-Of-Memory (OOM) panic while copying the ISO image to tmpfs.
-* **Resolution:**
-  1. Hard power-off the laptop.
-  2. Re-insert USB drive.
-  3. Boot without modifying the GRUB command line (do **NOT** add `toram`).
-  4. Keep the USB drive plugged in for the entire install process.
+### B3. Cannot disable, or it turns itself back on
+- **Check:** `manage-bde -status C:` again at the seat.
+- **Fix:** Turn off again and re-check. Optional prevention: registry value `PreventDeviceEncryption` = 1 (DWORD) under `HKLM\SYSTEM\CurrentControlSet\Control\BitLocker`. `[OPEN: use it or not]`
+- **Escalate:** Still on after a retry: come back another day.
 
-### Problem 2.2: Installer hangs on Subiquity loading screen
-* **Root Cause:** Corrupted live image flash or GPU driver lockup during Plymouth splash screen.
-* **Resolution:**
-  1. Force reboot. At the GRUB menu, highlight `Try or Install Ubuntu Server` and press `e`.
-  2. Locate line starting with `linux`.
-  3. Append `nomodeset` to the end of the parameters line.
-  4. Press `F10` to boot with generic display drivers.
+### B4. Recovery key missing or wrong
+- **Check:** Student's Microsoft account recovery key page (`aka.ms/myrecoverykey`); match the key ID.
+- **Fix:** Retrieve the key. No BIOS, partition or bootloader change until it matches.
+- **Escalate:** Cannot retrieve: come back another day.
+
+### B5. Recovery prompt appears (after BIOS change, boot change or install)
+- **Fix:** Stop touching anything. Enter the full 48-digit key. Boot Windows. Run `manage-bde -status C:`. Decrypt again if needed. Then continue.
+- **Escalate:** Key rejected or Windows will not boot: Super.
 
 ---
 
-## 3. PARTITIONING & STORAGE EMERGENCY PROCEDURES
+## Storage Controller
 
-### Problem 3.1: Windows Disk Management refuses to shrink C: drive beyond a small amount
-* **Root Cause:** Windows unmovable system files (pagefile, hibernation file, system restore shadow copies) located at the end of the volume.
-* **Resolution:**
-  1. Boot into Windows as Administrator.
-  2. Open Command Prompt (`cmd`) as Admin and disable hibernation:
-     ```cmd
-     powercfg /h off
-     ```
-  3. Temporarily disable Pagefile: `System Properties > Advanced > Performance Settings > Advanced > Virtual Memory > No paging file`.
-  4. Reboot Windows, open `diskmgmt.msc`, and re-attempt shrink.
-  5. Re-enable pagefile after shrink completes.
-* **Note:** Hibernation stays **off** by design — Windows Fast Startup depends on it and must remain off for clean dual-boot and for GRUB's `os-prober` to detect Windows (see Problem 5.2).
+### S1. Internal disk missing in the live session
+- **Check:** `lsblk` shows no `nvme0n1`. Confirm: `lspci -nn | grep -iE 'raid|volume management|non-volatile'`.
+- **Fix:** "Volume Management Device" or "RAID bus controller" means RST/VMD/RAID mode. In Windows: `msconfig` > Boot > tick Safe boot: Minimal, restart into BIOS, set storage mode to AHCI, save. Windows boots into Safe Mode and installs the driver. In Safe Mode untick Safe boot in `msconfig`, restart normally, and confirm Windows boots. Then retry the USB.
+- **Escalate:** No AHCI option in BIOS: out of scope `[CONFIRM]`.
 
-### Problem 3.2: Accidental modification / deletion of existing EFI partition
-* **Root Cause:** Operator formatted the existing FAT32 boot partition during custom layout.
-* **Resolution (Emergency EFI Repair):**
-  1. Complete Linux installation.
-  2. Boot into Linux, open terminal, and reinstall GRUB to EFI. UEFI requires explicit `--target` and `--efi-directory` (the bare `grub-install /dev/nvme0n1` form only works for legacy BIOS):
-     ```bash
-     sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu /dev/nvme0n1 # adjust to actual disk ID
-     sudo update-grub
-     ```
-  3. To restore Windows bootloader, prepare a Windows Recovery USB, boot into command prompt, and run:
-     ```cmd
-     bootrec /fixmbr
-     bootrec /fixboot
-     bcdboot C:\Windows
-     ```
+### S2. Windows blue-screens after the mode change (0x7B)
+- **Fix:** Set BIOS back to the original mode. Windows boots again. Redo S1 in the correct order (Safe boot flag first).
+- **Escalate:** Windows still will not boot: Super and the green Windows recovery USB.
 
-### Problem 3.3: Installer won't use the existing Windows EFI partition for `/boot/efi`
-* **Root Cause:** Subiquity only lets you mount an existing ESP when its disk is selected as a boot device, and the Format checkbox can default to on.
-* **Resolution:**
-  1. In Custom Storage Layout, select the small FAT32 partition flagged **EFI System**.
-  2. Confirm its mount point is `/boot/efi` and **Format is UNCHECKED** — one ESP safely holds both Windows and Ubuntu boot files.
-  3. If the mount option is greyed out, the target disk is not selected as a boot device in the storage screen; enable it, and the installer reuses the existing ESP.
-  4. Do not let the installer create a second ESP — a new ~538 MiB ESP is auto-created only on disks with none, and a second ESP on another disk orphans GRUB from the firmware boot order.
+### S3. Several internal drives
+- **Check:** `lsblk -f`. Identify the disk holding the NTFS Windows partition by size and model.
+- **Escalate:** Not 100% sure which disk: Super.
 
-### Problem 3.4: Installer warns "no swap space has been specified"
-* **Root Cause:** The custom layout only created `/`, so no swap exists; Ubuntu's guided-install swapfile is not created for custom layouts.
-* **Resolution:**
-  1. This is a warning, not an error — continue the install.
-  2. After first boot, add a swapfile (recommended on <6 GB RAM laptops):
-     ```bash
-     sudo fallocate -l 4G /swapfile
-     sudo chmod 600 /swapfile
-     sudo mkswap /swapfile
-     sudo swapon /swapfile
-     echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-     ```
+### S4. Dynamic disk or Storage Spaces
+- **Fix:** Out of scope `[CONFIRM]`.
 
 ---
 
-## 4. NETWORKING & CAPTIVE PORTAL FAILURES
+## BIOS / Firmware
 
-### Problem 4.1: `nmcli dev` shows no wireless interfaces (`wlan0` missing)
-* **Root Cause:** Wi-Fi card requires proprietary drivers (e.g., Realtek `rtl8821ce`, Broadcom `b43`, Wi-Fi 7 chipsets).
-* **Resolution:**
-  1. Connect internet via **USB Tethering** using a mobile phone connected to Wi-Fi.
-  2. Alternatively, attach a USB-to-Ethernet dongle or offline driver payload USB.
-  3. Run automatic driver installation:
-     ```bash
-     sudo ubuntu-drivers install
-     ```
+### F1. Secure Boot cannot be turned off, or supervisor password
+- **Check:** Look under Security/Boot menus (names vary by OEM). Some need a password set first.
+- **Fix:** Student supplies the password if one exists.
+- **Escalate:** Locked with no password: out of scope.
 
-### Problem 4.2: Captive bypass script reports success, but `ping google.com` fails
-* **Root Cause:** DNS resolution failure — the portal's DNS servers aren't resolving, or a stale server is cached.
-* **Resolution:**
-  1. Test direct IP connectivity:
-     ```bash
-     ping -c 3 8.8.8.8
-     ```
-  2. If IP ping works but domain ping fails, override DNS for the active link. Do **not** overwrite `/etc/resolv.conf` — it is a symlink managed by `systemd-resolved`/NetworkManager and gets clobbered on reconnect:
-     ```bash
-     nmcli -t dev status          # find the Wi-Fi interface name (e.g. wlp2s0, wlan0)
-     sudo resolvectl dns <interface> 8.8.8.8
-     ```
-  3. Verify with `ping -c 3 google.com`.
+### F2. USB missing from the boot menu
+- **Fix:** Fast Boot off, USB boot on, UEFI mode. Try another port or adapter, then another USB stick.
+- **Escalate:** Fails after two attempts: park the laptop.
+
+### F3. BIOS settings do not persist
+- **Fix:** Retry once and check the clock/battery warning.
+- **Escalate:** Still reverts: out of scope.
+
+### F4. Windows installed in Legacy mode
+- **Check:** msinfo32 BIOS Mode says Legacy.
+- **Escalate:** Out of scope `[CONFIRM]`.
 
 ---
 
-## 5. POST-INSTALL & DESKTOP ENVIRONMENT FAILURES
+## Wi-Fi / Drivers
 
-### Problem 5.1: Laptop boots straight into Windows, skipping GRUB menu
-* **Root Cause:** Windows Boot Manager remains prioritized at the UEFI firmware level.
-* **Resolution:**
-  1. Enter BIOS setup on reboot.
-  2. Navigate to **Boot Priority / Boot Order**.
-  3. Move **`ubuntu`** or **`GRUB`** to position #1, above `Windows Boot Manager`.
-  4. Save and exit.
+### W1. No Wi-Fi in the live session
+- **Check:** `lspci -nnk | grep -iA3 net` shows the chip and which driver claims it. Try Wi-Fi off/on and airplane-mode key first.
+- **Fix:** Driver USB (red), then an external NIC.
 
-### Problem 5.2: Dual-boot GRUB menu appears, but Windows option is missing
-* **Root Cause:** `os-prober` is disabled by default in modern GRUB packages (`GRUB_DISABLE_OS_PROBER` defaults to true).
-* **Resolution:**
-  1. Boot into Ubuntu.
-  2. Open terminal, enable os-prober, and regenerate the menu:
-     ```bash
-     echo 'GRUB_DISABLE_OS_PROBER=false' | sudo tee -a /etc/default/grub
-     sudo update-grub
-     ```
-  3. Verify Windows Boot Manager is detected and listed in terminal output. Reboot.
-* **Note:** os-prober also skips a hibernated/dirty NTFS volume. If Windows Fast Startup is on, disable it in Windows (`Control Panel > Power Options > Choose what the power buttons do` → untick **Turn on fast startup**), reboot Windows once, then repeat step 2.
+### W2. Driver USB (red)
+- **Fix:** Plug in, open the stick in the file manager, copy the matching driver folder to the home directory, install from Konsole. The driver team's own sheet gives the exact files and commands. `[UNTESTED]` `[OPEN: write the team sheet]`
+- **Escalate:** Stick unreadable: try another red USB.
 
-### Problem 5.3: KDE display manager drops into login loop (logs in, screen flashes, drops back to SDDM)
-* **Root Cause:** Usually the minimal desktop install (`--no-install-recommends`) is missing the session component Plasma needs to start (e.g. `plasma-workspace-wayland`) — not a full root partition. A 50 GB `/` almost never fills from a KDE install.
-* **Resolution:**
-  1. At the SDDM login screen, press `Ctrl + Alt + F3` to access a TTY text console.
-  2. Log in and inspect free space: `df -h /`.
-  3. If space is tight, clean cached packages:
-     ```bash
-     sudo apt clean
-     sudo apt install -f
-     ```
-  4. Otherwise, install the missing session component and restart the login manager:
-     ```bash
-     sudo apt install -y plasma-workspace-wayland
-     sudo systemctl restart sddm
-     ```
-  5. At SDDM, try the **Wayland** session if the X11 session keeps looping.
+### W3. External NIC
+- **Fix:** Plug in a known-good USB Ethernet or USB Wi-Fi adapter. NetworkManager should pick it up.
+- **Escalate:** Not recognized: next fallback.
+
+### W4. Captive portal
+- **Fix:** Open Firefox in the live session and log in through the portal page.
+- **Escalate:** Portal never appears or rejects the device (MAC-bound?): `[OPEN]`, ask a Super.
+
+### W5. Wi-Fi works live but not after install
+- **Fix:** Repeat W2 or W3 on the installed system.
+
+### W6. All fallbacks fail
+- **Fix:** Student comes back another day (likely a broken NIC). Out of scope.
+
+---
+
+## Graphics
+
+### G1. Black screen on live boot
+- **Fix:** Pick the Safe Graphics entry. If needed, press `e` at GRUB and add `nomodeset` (before `---`).
+
+### G2. Frozen logo with `toram`
+- **Check:** Wait and watch the USB activity light; slow copies can take 10+ minutes.
+- **Fix:** Press `e`, remove `quiet splash` to see messages. Test `toram` alone and Safe Graphics alone. Confirm `toram` is before `---`.
+- **Escalate:** Out-of-memory or copy errors: boot without `toram` (and with the USB staying in).
+
+### G3. NVIDIA / hybrid / AMD issues
+- **Fix:** Nouveau/open graphics is enough. Proprietary drivers are out of scope.
+
+### G4. Graphics fail after install
+- **Fix:** At GRUB press `e` and add `nomodeset` to boot once. `[OPEN: offline permanent fix]`
+
+### G5. External monitor fails
+- **Fix:** Non-blocking; record it.
+
+---
+
+## Boot (EFI / GRUB)
+
+### E1. Boots straight to Windows
+- **Check:** `efibootmgr` with no arguments.
+- **Fix:** Move Ubuntu first with `sudo efibootmgr -o <ubuntu entry>,<windows entry>`. If it does not stick (Acer is the expected one), set the order in the BIOS directly.
+
+### E2. Windows missing from GRUB
+- **Fix:** Add `GRUB_DISABLE_OS_PROBER=false` to `/etc/default/grub`, then `sudo update-grub`. If still missing, turn Windows Fast Startup off, boot Windows once, retry.
+
+### E3. `grub>` prompt after reboot
+- **Cause:** Old EFI entry (for example a leftover Debian one) outranks the new Kubuntu entry and has no menu.
+- **Fix:** Type `exit`, or use the firmware boot menu and pick Kubuntu or Windows. In Kubuntu: `sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu`, `sudo update-grub`, delete the stale entry with `sudo efibootmgr -b <entry> -B`, then fix the boot order (E1).
+- **Escalate:** Cannot find the Kubuntu root: Super.
+
+### E4. Linux only boots through the firmware menu
+- **Fix:** Repeat E1 and the BIOS boot order. Record the OEM.
+
+### E5. EFI partition formatted by mistake
+- **Escalate:** Immediately to a Super. Windows may need the green recovery USB (`bootrec` and `bcdboot C:\Windows`). Do not improvise.
+
+### E6. EFI full or NVRAM full
+- **Check:** `df -h /boot/efi`, `efibootmgr`.
+- **Fix:** Delete stale entries with `sudo efibootmgr -b <entry> -B`.
+
+### E7. GRUB gone after a later Windows update
+- **Fix:** Tell students at handoff. Repeat E1.
+
+---
+
+## Installer / Partitioning
+
+### P1. Windows will not shrink enough
+- **Check:** Disk Management shows far less shrinkable space than free space.
+- **Fix:** Admin Command Prompt: `powercfg /h off`. Temporarily disable the pagefile, reboot, shrink, then re-enable it. Fast Startup stays off.
+- **Escalate:** Still stuck: park the laptop.
+
+### P2. Filesystem errors or a failing drive
+- **Fix:** Run `chkdsk C: /f` from Windows.
+- **Escalate:** Bad sectors or SMART warnings: out of scope.
+
+### P3. Layout does not match Disk Management
+- **Escalate:** Stop and call a Super. Never press Install.
+
+### P4. Installer will not launch or crashes
+- **Fix:** Retry once, reboot the live session, try another USB.
+
+### P5. Partitioning errors
+- **Fix:** Retry the step once.
+- **Escalate:** Repeats: Super.
+
+### P6. Installation fails or GRUB fails to install
+- **Fix:** Note the exact error. Do not reboot.
+- **Escalate:** Super.
+
+### P7. USB removed too early or corrupted ISO
+- **Fix:** Reboot and redo. Verify the USB checksum, or swap the stick.
+
+---
+
+## Unknown
+
+- Error not listed here, an untested command, or anything destructive: stop and call a Super.
