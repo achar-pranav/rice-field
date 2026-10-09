@@ -51,8 +51,10 @@ Then direct the student to a seat.
 
 ## 2. BIOS / UEFI
 
-- [ ] UEFI mode, Secure Boot OFF, USB boot enabled
-- [ ] Do **not** change the storage mode unless the internal disk is missing in section 4
+- [ ] Confirm UEFI mode
+- [ ] Secure Boot OFF
+- [ ] USB boot enabled and set to highest priority
+- [ ] Verify Storage Mode as AHCI unless the internal disk is missing in section 4
 - [ ] Supervisor password, locked options, or odd menus: **BIOS/Firmware department.** Rejoin here.
 - [ ] Record unusual OEM behavior
 
