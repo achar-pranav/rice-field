@@ -7,7 +7,7 @@ Installing Kubuntu 26.04.1 alongside Windows on about 210 student laptops, run i
 | If you are... | Read |
 |---|---|
 | A participant | `BRIEF.md` (before the event) |
-| An operator (owns 3 participants) | `MASTER.md`, read aloud step by step |
+| An operator (owns participants) | `MASTER.md`, direct step by step |
 | In a department (specialist team) | `RUNBOOK.md` |
 | A Super | `MASTER-FLOWCHART.md`, then `RUNBOOK.md` and `ROADBLOCKS.md` as needed |
 
