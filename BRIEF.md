@@ -176,7 +176,9 @@ Hibernation should say **not available**. That means Fast Startup is off.
 
 ## 5. Make space for Linux
 
-**Do this at the event.** The operator will help you. Do not shrink your disk at home unless an operator tells you to.
+We recommend at least 100GB of free unallocated space for Linux. You can even install with 50GB but will face issues if you plan to use Linux seriously. Free up games, big videos/media etc.
+
+**Do this at the event.** Do not shrink your disk at home unless an operator tells you to.
 
 Skip to Step 6.
 
